@@ -1,6 +1,7 @@
 # Simple Blog plugin 
 ### Author: Stephan Stanisic (https://github.com/StephanStanisic/)
 #### Forked by: Slaven Stančič (https://github.com/slavenstancic)
+#### Forked by: Oliver Maurer (https://github.com/loveouzo)
 
 This is a simple blog plugin for WonderCMS 3.x.x
 
