@@ -1,5 +1,5 @@
 <?php
-
+error_reporting(E_NOTICE);
 global $Wcms;
 
 class SimpleBlog {
@@ -52,6 +52,7 @@ class SimpleBlog {
 		$this->Wcms->addListener('page', [$this, 'pageListener']);
 		$this->Wcms->addListener('css', [$this, 'startListener']);
 		$this->Wcms->addListener('js', [$this, 'jsListener']);
+		$this->Wcms->addListener('settings', [$this, 'alterAdmin']);
 
 		$pathTest = $this->Wcms->currentPageTree;
 		if (array_shift($pathTest) === $this->slug) {
@@ -134,8 +135,12 @@ class SimpleBlog {
 				}
 			}
 		}
-
-		$args[0] .= "<link rel='stylesheet' href='{$this->Wcms->url('plugins/simple-blog/css/blog.css')}'>";
+		// built-in CSS or theme CSS
+		if (isset ($this->Wcms->get('config')->blogCSS) && $this->Wcms->get('config')->blogCSS == "theme") {
+			$args[0] .= ""; // do not embed css-link
+		} else {
+			$args[0] .= "<link rel='stylesheet' href='{$this->Wcms->url('plugins/simple-blog/css/blog.css')}'>"; // embed built-in css
+		}
 
 		return $args;
 	}
@@ -144,9 +149,11 @@ class SimpleBlog {
 		if (! $this->active) {
 			return $args;
 		}
+		if ($this->Wcms->loggedIn) {
 
-		$args[0] .= '<script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha384-nvAa0+6Qg9clwYCGGPpDQLVpLNn0fRaROjHqs13t4Ggj3Ez50XnGQqc/r8MhnRDZ" crossorigin="anonymous"></script>';
-		$args[0] .= "<script src='{$this->Wcms->url('plugins/simple-blog/js/blog.js')}'></script>";
+			$args[0] .= '<script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha384-nvAa0+6Qg9clwYCGGPpDQLVpLNn0fRaROjHqs13t4Ggj3Ez50XnGQqc/r8MhnRDZ" crossorigin="anonymous"></script>';
+			$args[0] .= "<script src='{$this->Wcms->url('plugins/simple-blog/js/blog.js')}'></script>";
+		}
 
 		return $args;
 	}
@@ -179,14 +186,26 @@ HTML;
 
 					$args[0] .= <<<HTML
 HTML;
-
+					// get the Intro Template
+					$introTemplate = $this->Wcms->get('config')->blogIntroTextTemplate;
+					// get the read more text
+					$readMore = $this->Wcms->get('config')->blogReadMore;
 					// Little inline reversing
 					foreach (array_reverse((array) $this->db->posts, true) as $slug => $post) {
 						$date = date($this->dateFormat, $post->date);
-
+						$currentPostURL = $this->Wcms->url($this->slug . '/' . $slug);
+						// prepare the placeholder-array
+						$placeholder = ["[[POST-URL]]", "[[POST-TITLE]]", "[[DATE]]", "[[POST-DESCRIPTION]]", "[[MORE-TEXT]]"];
+						// prepare the wcms variables
+						$variables = [$currentPostURL, $post->title, $date, $post->description, $readMore];
+						// get the template and replace everything
+						$currentIntro = str_replace($placeholder, $variables, $introTemplate);
 						$args[0] .= <<<HTML
+                        {$currentIntro}
+HTML;
+						/*$args[0] .= <<<HTML
                         <div class="post card">
-                            <h3>{$post->title}</h3>
+                            <h3><a href="{$this->Wcms->url($this->slug . '/' . $slug)}" class="text-right">{$post->title}</a></h3>
                             <div class="meta">
                                 <div class="row">
                                     <div class="col-sm-12 text-right"><small>{$date}</small></div>
@@ -195,7 +214,7 @@ HTML;
                             <p class="description">{$post->description}</p>
                             <a href="{$this->Wcms->url($this->slug . '/' . $slug)}" class="text-right">&#8618; Read more</a>
                         </div>
-HTML;
+HTML;*/
 					}
 					break;
 				default:
@@ -203,6 +222,9 @@ HTML;
 						// Display post
 						$post = $this->db->posts->{$this->path};
 						$date = date($this->dateFormat, $post->date);
+
+						// get the back-text
+						$goBackText = $this->Wcms->get('config')->blogBack;
 
 						$edit = '';
 						$description = '';
@@ -217,24 +239,40 @@ HTML;
                                 <hr>
                                 <div data-target="blog" id="body" class="body editText editable">{$post->body}</div>
                             </div>
+							<div class="text-left">
+								<br /><br />
+								<a href="../$this->slug" class="btn btn-sm btn-light"><span class="glyphicon glyphicon-chevron-left small"></span>{$goBackText}</a>
+							</div>
 HTML;
 						} else {
+							// get the Post Template
+							$postTemplate = $this->Wcms->get('config')->blogPostTextTemplate;
+
+							// prepare the placeholder-array
+							$placeholder = ["[[POST-TITLE]]", "[[DATE]]", "[[POST-BODY]]", "[[BACK-LINK]]", "[[BACK-TEXT]]"];
+							// prepare the wcms variables
+							$variables = [$post->title, $date, $post->body, "../".$this->slug, $goBackText];
+							// get the template and replace everything
+							$currentPost = str_replace($placeholder, $variables, $postTemplate);
 							$args[0] = <<<HTML
+                            {$currentPost}
+HTML;
+							/*$args[0] = <<<HTML
                             <div class="post">
                                 <h1 class="title">{$post->title}</h1>
                                 <p class="meta">{$date}</p>
                                 <div class="body">{$post->body}</div>
                             </div>
-HTML;
+HTML;*/
 						}
 
-						$args[0] .= <<<HTML
+						/*$args[0] .= <<<HTML
                         
                         <div class="text-left">
                             <br /><br />
                             <a href="../$this->slug" class="btn btn-sm btn-light"><span class="glyphicon glyphicon-chevron-left small"></span> Back to all blog posts</a>
                         </div>
-HTML;
+HTML;*/
 					} else {
 						// Display 404 (unless it's admin, then it's never a 404)
 						$args[0] = $this->Wcms->get('pages', '404')->content;
@@ -268,4 +306,208 @@ HTML;
 
 		return $args;
 	}
+
+	// admin veraendern
+	public function alterAdmin(array $args): array {
+		// defaults
+		$defMoreText = "Read more";
+		$defBackText = "Zurück zur Übersicht";
+		$defIntroTemplate = '<div class="post card">
+                            <h3><a href="[[POST-URL]]" class="text-right">[[POST-TITLE]]</a></h3>
+                            <div class="meta">
+                                <div class="row">
+                                    <div class="col-sm-12 text-right"><small>[[DATE]]</small></div>
+                                </div>
+                            </div>
+                            <p class="description">[[POST-DESCRIPTION]]</p>
+                            <a href="[[POST-URL]]" class="text-right">[[MORE-TEXT]]</a>
+                        </div>';
+		$defPostTemplate = '<div class="post">
+                                <h1 class="title">[[POST-TITLE]]</h1>
+                                <p class="meta">[[DATE]]</p>
+                                <div class="body">[[POST-BODY]]</div>
+                            </div>
+								<div class="text-left">
+									<br /><br />
+									<a href="[[BACK-LINK]]" class="btn btn-sm btn-light"><span class="glyphicon glyphicon-chevron-left small"></span>[[BACK-TEXT]]</a>
+							</div>';
+
+		// create new DOMdocument
+        $doc = new DOMDocument();
+        @$doc->loadHTML($args[0]);
+        @$doc->loadHTML(mb_convert_encoding($args[0], 'HTML-ENTITIES', 'UTF-8'));
+
+        $menuItem = $doc->createElement('li');
+        $menuItem->setAttribute('class', 'nav-item');
+        $menuItemA = $doc->createElement('a');
+        $menuItemA->setAttribute('href', '#blog');
+        $menuItemA->setAttribute('aria-controls', 'blog');
+        $menuItemA->setAttribute('role', 'tab');
+        $menuItemA->setAttribute('data-toggle', 'tab');
+        $menuItemA->setAttribute('class', 'nav-link');
+        $menuItemA->nodeValue = 'Blog';
+        $menuItem->appendChild($menuItemA);
+
+        $doc->getElementById('currentPage')->parentNode->parentNode->childNodes->item(1)->appendChild($menuItem);
+
+        $wrapper = $doc->createElement('div');
+        $wrapper->setAttribute('role', 'tabpanel');
+        $wrapper->setAttribute('class', 'tab-pane');
+        $wrapper->setAttribute('id', 'blog');
+
+        // Contents of wrapper
+
+		// read more text
+		$label = $doc->createElement("p");
+		$label->setAttribute("class", "subTitle");
+		$label->nodeValue = '"Weiter lesen ..."-Text';
+		$wrapper->appendChild($label);
+
+		$wrapper2 = $doc->createElement("div");
+		$wrapper2->setAttribute("class", "change");
+
+		$input = $doc->createElement("div");
+		$input->setAttribute("class", "editText");
+		$input->setAttribute("data-target", "config");
+		$input->setAttribute("id", "blogReadMore");
+		// JUST AS A REMINDER how to get the data
+		// echo $this->Wcms->get('config')->blogReadMore;
+
+		if (isset ($this->Wcms->get('config')->blogReadMore)) {
+			$moreText = $this->Wcms->get('config')->blogReadMore;
+		} else {
+			// otherwise take the defaults from above
+			$moreText = $defMoreText;
+		}
+		$input->nodeValue = $moreText;
+
+		$wrapper2->appendChild($input);
+        $wrapper->appendChild($wrapper2);
+
+		// back to all posts
+		$label = $doc->createElement("p");
+		$label->setAttribute("class", "subTitle");
+		$label->nodeValue = '"Zurück zur Übersicht"-Text';
+		$wrapper->appendChild($label);
+
+		$wrapper2 = $doc->createElement("div");
+		$wrapper2->setAttribute("class", "change");
+
+		$input = $doc->createElement("div");
+		$input->setAttribute("class", "editText");
+		$input->setAttribute("data-target", "config");
+		$input->setAttribute("id", "blogBack");
+
+		if (isset ($this->Wcms->get('config')->blogBack)) {
+			$backText = $this->Wcms->get('config')->blogBack;
+		} else {
+			// otherwise take the defaults from above
+			$backText = $defBackText;
+		}
+		$input->nodeValue = $backText;
+
+		$wrapper2->appendChild($input);
+        $wrapper->appendChild($wrapper2);
+
+		// intro text template
+		$label = $doc->createElement("p");
+		$label->setAttribute("class", "subTitle");
+		$label->nodeValue = 'Template Einleitungstext';
+		$wrapper->appendChild($label);
+
+		$hints = $doc->createElement("p");
+		$hints->setAttribute("class", "subTitle");
+		$hints->setAttribute("class", "small");
+		$hints->nodeValue = 'Platzhalter: [[POST-URL]], [[POST-TITLE]], [[DATE]], [[POST-DESCRIPTION]], [[MORE-TEXT]]';
+		$wrapper->appendChild($hints);
+
+		$wrapper2 = $doc->createElement("div");
+		$wrapper2->setAttribute("class", "change");
+
+		$input = $doc->createElement("div");
+		$input->setAttribute("class", "editText");
+		$input->setAttribute("data-target", "config");
+		$input->setAttribute("id", "blogIntroTextTemplate");
+		if (isset ($this->Wcms->get('config')->blogIntroTextTemplate)) {
+			$introTemplate = $this->Wcms->get('config')->blogIntroTextTemplate;
+		} else {
+			// otherwise take the defaults from above
+			$introTemplate = $defIntroTemplate;
+		}
+		$input->nodeValue = $introTemplate;
+
+		$wrapper2->appendChild($input);
+        $wrapper->appendChild($wrapper2);
+
+		// full text template
+		$label = $doc->createElement("p");
+		$label->setAttribute("class", "subTitle");
+		$label->nodeValue = 'Template Artikel/Post';
+		$wrapper->appendChild($label);
+
+		$hints = $doc->createElement("p");
+		$hints->setAttribute("class", "subTitle");
+		$hints->setAttribute("class", "small");
+		$hints->nodeValue = 'Platzhalter: [[POST-TITLE]], [[DATE]], [[POST-BODY]], [[BACK-LINK]], [[BACK-TEXT]]';
+		$wrapper->appendChild($hints);
+
+		$wrapper2 = $doc->createElement("div");
+		$wrapper2->setAttribute("class", "change");
+
+		$input = $doc->createElement("div");
+		$input->setAttribute("class", "editText");
+		$input->setAttribute("data-target", "config");
+		$input->setAttribute("id", "blogPostTextTemplate");
+		if (isset ($this->Wcms->get('config')->blogPostTextTemplate)) {
+			$postTemplate = $this->Wcms->get('config')->blogPostTextTemplate;
+		} else {
+			// otherwise take the defaults from above
+			$postTemplate = $defPostTemplate;
+		}
+		$input->nodeValue = $postTemplate;
+
+		$wrapper2->appendChild($input);
+        $wrapper->appendChild($wrapper2);
+
+		// theme css or built-in css
+		$label = $doc->createElement("p");
+		$label->setAttribute("class", "subTitle");
+		$label->nodeValue = "CSS auswählen";
+		$wrapper->appendChild($label);
+
+		$wrapper2 = $doc->createElement("div");
+		$wrapper2->setAttribute("class", "change");
+
+		$input = $doc->createElement("select");
+		$input->setAttribute("id", "selectBlogCSS");
+		$input->setAttribute("class", "wform-control");
+		$input->setAttribute("onchange", "wcmsAdminActions.sendPostRequest('blogCSS',this.value,'config');");
+		$input->setAttribute("name", "blogCSS");
+
+		//use built-in CSS (css-file provided by plugin)
+		$option = $doc->createElement("option");
+		$option->setAttribute("value", "");
+		$option->nodeValue = "Built-in CSS";
+		$input->appendChild($option);
+
+		// use theme CSS (declare your CSS in your themes' css file)
+		$option = $doc->createElement("option");
+		$option->setAttribute("value", "theme");
+		$option->nodeValue = "Theme CSS";
+		// get current value of select
+		if (isset ($this->Wcms->get('config')->blogCSS) && $this->Wcms->get('config')->blogCSS == "theme")
+			$option->setAttribute("selected", "selected");
+		$input->appendChild($option);
+
+		$wrapper2->appendChild($input);
+		$wrapper->appendChild($wrapper2);
+
+        // End of contents of wrapper
+
+        $doc->getElementById('currentPage')->parentNode->appendChild($wrapper);
+
+        $args[0] = preg_replace('~<(?:!DOCTYPE|/?(?:html|body))[^>]*>\s*~i', '', $doc->saveHTML());
+
+        return $args;
+    }
 }
